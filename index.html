@@ -186,41 +186,49 @@
 
     <script>
         const API_KEY = '3ba34cf5430644879715f48f0953ec11';
-        const stockGrid = document.getElementById('stockGrid');
-        const searchInput = document.getElementById('searchInput');
-        const loading = document.getElementById('loading');
-        const initialStocks = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA'];
+    const stockGrid = document.getElementById('stockGrid');
+    const searchInput = document.getElementById('searchInput');
+    const loading = document.getElementById('loading');
+    const initialStocks = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA'];
 
-        async function fetchStockData(symbol) {
-            try {
-                showLoading();
-                const [quoteRes, overviewRes] = await Promise.all([
-                    fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`),
-                    fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${API_KEY}`)
-                ]);
-                
-                const quoteData = await quoteRes.json();
-                const overviewData = await overviewRes.json();
+    async function fetchStockData(symbol) {
+        try {
+            showLoading();
+            const [quoteRes, overviewRes] = await Promise.all([
+                fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`),
+                fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${API_KEY}`)
+            ]);
+            
+            const quoteData = await quoteRes.json();
+            const overviewData = await overviewRes.json();
 
-                return {
-                    symbol,
-                    price: quoteData['Global Quote']['05. price'],
-                    change: quoteData['Global Quote']['10. change percent'].replace('%', ''),
-                    high52: quoteData['Global Quote']['03. high'],
-                    low52: quoteData['Global Quote']['04. low'],
-                    peRatio: overviewData.PERatio || 'N/A',
-                    marketCap: overviewData.MarketCapitalization || 'N/A',
-                    volume: quoteData['Global Quote']['06. volume'],
-                    open: quoteData['Global Quote']['02. open']
-                };
-            } catch (error) {
-                alert('Error fetching data: ' + error.message);
-                return null;
-            } finally {
-                hideLoading();
+            // Handle API rate limiting
+            if (quoteData.Note || overviewData.Note) {
+                throw new Error('API rate limit exceeded. Please try again later.');
             }
-        }
 
+            const globalQuote = quoteData['Global Quote'] || {};
+            const overview = overviewData || {};
+
+            return {
+                symbol,
+                price: globalQuote['05. price'] || 'N/A',
+                change: (globalQuote['10. change percent'] || '').replace('%', ''),
+                high52: globalQuote['03. high'] || 'N/A',
+                low52: globalQuote['04. low'] || 'N/A',
+                peRatio: overview.PERatio || 'N/A',
+                marketCap: overview.MarketCapitalization || 'N/A',
+                volume: globalQuote['06. volume'] || 'N/A',
+                open: globalQuote['02. open'] || 'N/A'
+            };
+        } catch (error) {
+            alert('Error fetching data: ' + error.message);
+            return null;
+        } finally {
+            hideLoading();
+        }
+    }
+        
         function createStockCard(stock) {
             const card = document.createElement('div');
             card.className = 'stock-card';
