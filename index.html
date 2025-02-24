@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Finance Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-dark: #0F172A;
+            --primary-blue: #1E3A8A;
+            --accent-teal: #2DD4BF;
+            --neutral-200: #E2E8F0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-blue) 100%);
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--neutral-200);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .title {
+            font-size: 3rem;
+            background: linear-gradient(45deg, var(--accent-teal), #7C3AED);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-container {
+            margin-top: 2rem;
+            position: relative;
+        }
+
+        #searchInput {
+            width: 100%;
+            max-width: 400px;
+            padding: 1rem;
+            border: 2px solid var(--accent-teal);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--neutral-200);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .stock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .stock-card {
+            background: rgba(30, 58, 138, 0.3);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(45, 212, 191, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(45, 212, 191, 0.15);
+        }
+
+        .stock-symbol {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-teal);
+            margin-bottom: 0.5rem;
+        }
+
+        .stock-price {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .stock-change {
+            font-size: 1.1rem;
+            font-weight: 300;
+        }
+
+        .positive { color: #10B981; }
+        .negative { color: #EF4444; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--accent-teal);
+            border-radius: 24px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 600px;
+            z-index: 1000;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 999;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .stat-item {
+            background: rgba(45, 212, 191, 0.1);
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--accent-teal);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Quantum Finance Pro</h1>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Search stock symbol (e.g., AAPL)" autocomplete="off">
+            </div>
+        </header>
+        <div class="stock-grid" id="stockGrid"></div>
+        <div class="loading" id="loading"></div>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="modal" id="stockModal">
+        <div class="modal-content" id="modalContent"></div>
+    </div>
+
+    <script>
+        const API_KEY = 'GMM73SL2BTT30UGR';
+        const stockGrid = document.getElementById('stockGrid');
+        const searchInput = document.getElementById('searchInput');
+        const loading = document.getElementById('loading');
+        const initialStocks = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA'];
+
+        async function fetchStockData(symbol) {
+            try {
+                showLoading();
+                const [quoteRes, overviewRes] = await Promise.all([
+                    fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`),
+                    fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${API_KEY}`)
+                ]);
+                
+                const quoteData = await quoteRes.json();
+                const overviewData = await overviewRes.json();
+
+                return {
+                    symbol,
+                    price: quoteData['Global Quote']['05. price'],
+                    change: quoteData['Global Quote']['10. change percent'].replace('%', ''),
+                    high52: quoteData['Global Quote']['03. high'],
+                    low52: quoteData['Global Quote']['04. low'],
+                    peRatio: overviewData.PERatio || 'N/A',
+                    marketCap: overviewData.MarketCapitalization || 'N/A',
+                    volume: quoteData['Global Quote']['06. volume'],
+                    open: quoteData['Global Quote']['02. open']
+                };
+            } catch (error) {
+                alert('Error fetching data: ' + error.message);
+                return null;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function createStockCard(stock) {
+            const card = document.createElement('div');
+            card.className = 'stock-card';
+            card.innerHTML = `
+                <div class="stock-symbol">${stock.symbol}</div>
+                <div class="stock-price">$${stock.price}</div>
+                <div class="stock-change ${stock.change >= 0 ? 'positive' : 'negative'}">
+                    ${stock.change >= 0 ? '+' : ''}${stock.change}%
+                </div>
+            `;
+
+            card.addEventListener('click', async () => {
+                const detailedData = await fetchStockData(stock.symbol);
+                if (detailedData) showStockDetails(detailedData);
+            });
+
+            return card;
+        }
+
+        function showStockDetails(stock) {
+            const modalContent = `
+                <h2 style="margin-bottom: 1.5rem; color: var(--accent-teal);">${stock.symbol} Analysis</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Current Price</div>
+                        <div class="stat-value">$${stock.price}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">52W High</div>
+                        <div class="stat-value">$${stock.high52}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">52W Low</div>
+                        <div class="stat-value">$${stock.low52}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">P/E Ratio</div>
+                        <div class="stat-value">${stock.peRatio}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Market Cap</div>
+                        <div class="stat-value">$${formatMarketCap(stock.marketCap)}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Volume</div>
+                        <div class="stat-value">${formatNumber(stock.volume)}</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('modalContent').innerHTML = modalContent;
+            document.getElementById('stockModal').style.display = 'block';
+            document.getElementById('modalOverlay').style.display = 'block';
+        }
+
+        // Utility functions
+        function formatMarketCap(value) {
+            if (!value || value === 'N/A') return 'N/A';
+            const num = parseFloat(value);
+            if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            return num.toFixed(2);
+        }
+
+        function formatNumber(num) {
+            return parseInt(num).toLocaleString();
+        }
+
+        function showLoading() {
+            loading.style.display = 'block';
+        }
+
+        function hideLoading() {
+            loading.style.display = 'none';
+        }
+
+        // Event listeners
+        searchInput.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter') {
+                const symbol = searchInput.value.trim().toUpperCase();
+                if (symbol) {
+                    const stockData = await fetchStockData(symbol);
+                    if (stockData) {
+                        stockGrid.prepend(createStockCard(stockData));
+                        searchInput.value = '';
+                    }
+                }
+            }
+        });
+
+        document.getElementById('modalOverlay').addEventListener('click', () => {
+            document.getElementById('stockModal').style.display = 'none';
+            document.getElementById('modalOverlay').style.display = 'none';
+        });
+
+        // Initialize
+        async function initialize() {
+            for (const symbol of initialStocks) {
+                const data = await fetchStockData(symbol);
+                if (data) stockGrid.appendChild(createStockCard(data));
+            }
+        }
+
+        initialize();
+    </script>
+</body>
+</html>
